@@ -4,221 +4,312 @@
 typedef struct{
 	mslog_level_t log_level;
 	char tag_filter[1024];//tag filter
-	int enable_line_info;
-	int enable_stdout;
 	char log_path[MSLOG_MAX_PATH_LEN];//log path
 	size_t rotate_size;//rotate file size(bit)
 	int rotate_num;//rotate file num
-	pthread_mutex_t mutex;// thread mutex
+	mslog_flush_mode_t flush_mode;//flush mode
+
+	pthread_mutex_t lock_bucket[MSLOG_LEVEL_MAX];//bucket lock by level
+	char *io_buf;//io buf
+	size_t io_buf_len;//io buf len
+	pthread_t flush_thread;//auto flush thread
+	int flush_running;//flush thread running flag
+	char time_cache[32];//timestamp cache
+	pthread_mutex_t time_lock;//time cache lock
+	time_t last_time;//last update time
+	int rotate_check_cnt;//rotate check counter
+	
+	FILE *log_fp;//log file handle
 }mslog_global_t;
 
-static mslog_global_t g_mslog = {0};
-static const char *g_level_str[MSLOG_LEVEL_MAX] = { "Debug", "Info", "Warn", "Error", "Fatal" };
-static const char *g_level_color[MSLOG_LEVEL_MAX] = {
-	MS_COLOR_DEBUG, MS_COLOR_INFO, MS_COLOR_WARN, MS_COLOR_ERROR, MS_COLOR_FATAL
+static mslog_global_t g_mslog = {
+	.log_level = MSLOG_DEBUG,
+	.rotate_size = MSLOG_DEFAULT_ROTATE_SIZE,
+	.rotate_num = MSLOG_DEFAULT_ROTATE_NUM,
+	.flush_mode = MSLOG_FLUSH_BATCH,
+	.io_buf_len = 0,
+	.flush_running = 0,
+	.last_time = 0,
+	.rotate_check_cnt = 0,
+	.log_fp = NULL
 };
 
-static char *ms_strdup(const char *s){
-	if ( s == NULL ){
-		return NULL;
+static void update_time_cache(void){
+	time_t now = time(NULL);
+	pthread_mutex_lock(&g_mslog.time_lock);
+	if ( now - g_mslog.last_time >= 1 ){
+		struct tm *tm = localtime(&now);
+		strftime(g_mslog.time_cache, sizeof(g_mslog.time_cache),
+				"%Y-%m-%d %H:%M%S", tm);
+		g_mslog.last_time = now;
 	}
-
-	size_t len = strlen(s) + 1;// +1 include '\0'
-	char *new_str = (char*)malloc(len);
-	if ( new_str != NULL ){
-		memcpy(new_str, s, len);
-	}
-	return new_str;
+	pthread_mutex_unlock(&g_mslog.time_lock);
 }
 
-static char *mslog_get_time(void){
-	static char time_buf[MSLOG_MAX_TIME_LEN];
-	time_t t = time(NULL);
-	struct tm *tm = localtime(&t);
-	strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H-%M:%S", tm);
-	return time_buf;
+static int tag_match(const char *tag){
+        if ( g_mslog.tag_filter[0] == '\0' || tag == NULL )
+		return 1;
+
+	char filter_copy[1024];
+	strncpy(filter_copy, (const char *)g_mslog.tag_filter, ( sizeof(filter_copy) - 1 ));
+	filter_copy[sizeof(filter_copy) - 1] = '\0';
+
+	char *token = strtok(filter_copy, "|");
+	while ( token != NULL ){
+		if ( strcmp(token, tag) == 0 )
+			return 1;
+		token = strtok(NULL, "|");
+	}
+        return 0;
 }
 
-static int mslog_rotate(void){
+//reduce use stat times
+static void mslog_rotate(void){
+	g_mslog.rotate_check_cnt = 0;//refresh timer
+	
 	struct stat st;
-	if ( stat(g_mslog.log_path, &st) < 0 ){
-		perror("mslog_rotate: state log file failed");
-		return -1;
-	}
+	if ( stat(g_mslog.log_path, &st) < 0 )
+		return;
+	if ( st.st_size < 0 )
+		return;
 
 	size_t file_size = (size_t)st.st_size;
-	if( file_size < g_mslog.rotate_size ){
-		return 0;
+	if (file_size < g_mslog.rotate_size )
+		return;
+
+	//close this file
+	if ( g_mslog.log_fp != NULL ){
+		fclose(g_mslog.log_fp);
+		g_mslog.log_fp = NULL;
 	}
 
+	//rotate file
 	char old_path[MSLOG_MAX_PATH_LEN];
 	char new_path[MSLOG_MAX_PATH_LEN];
+	const size_t max_path_len = sizeof(old_path) - 12;
 
-	size_t base_len = strlen(g_mslog.log_path);
-	if ( base_len + 16 > MSLOG_MAX_PATH_LEN ){
-		fprintf(stderr,"mslog_rotate: log path too long: %s\n",g_mslog.log_path);
-		return -1;
+	size_t log_path_len = strlen(g_mslog.log_path);
+	if ( log_path_len >= max_path_len ){
+		fprintf(stderr, "log path is too long, can't generate rotate file path");
+		return;
 	}
 
 	for ( int i = g_mslog.rotate_num; i > 0; i-- ){
-		snprintf( old_path, sizeof(old_path), "%s.%d", g_mslog.log_path, i );
-		snprintf( new_path, sizeof(new_path), "%s.%d", g_mslog.log_path, i+1 );
-		if ( access( old_path, F_OK ) == 0 ){
-			rename( old_path, new_path );
+		snprintf(old_path, sizeof(old_path), "%s.%d", g_mslog.log_path, i);
+		snprintf(new_path, sizeof(new_path), "%s.%d", g_mslog.log_path, i+1);
+		if ( access(old_path, F_OK) == 0 ){
+			rename(old_path, new_path);
 		}
 	}
 
-	//rename log name: log.log.1
-	snprintf( old_path, sizeof(old_path), "%s.1", g_mslog.log_path );
-	rename( g_mslog.log_path, old_path);
+	//this file
+	snprintf(old_path, sizeof(old_path), "%s.1", g_mslog.log_path);
+	rename(g_mslog.log_path, old_path);
 
-	//only write 644
-	FILE *fp = fopen(g_mslog.log_path, "w");
-	if ( fp != NULL){
-		fclose(fp);
+	//open file again
+	g_mslog.log_fp = fopen(g_mslog.log_path, "a+");
+	if ( g_mslog.log_fp == NULL ){
+		perror("fopen failed");
 	}
-	else
-	{
-		perror("mslog_rotate: create new log file failed");
-		return -1;
-	}
-	return 0;
 }
 
-static int mslog_tag_match(const char *tag){
-	if ( tag == NULL || g_mslog.tag_filter[0] == '\0'){
-		return 1;// tag is NULL or no tag just pass
-	}
+//auto do flush func
+static void do_flush(void){
+	if ( g_mslog.log_fp == NULL || g_mslog.io_buf_len == 0 )
+		return;
 
-	//multi tag match use | to separator
-	char *filter = ms_strdup(g_mslog.tag_filter);
-	if ( filter == NULL )
-		return 1;
-	char *token = strtok(filter, "|");
-	int match = 0;
-	while ( token != NULL ){
-		if ( strcmp(token, tag) == 0 ){
-			match = 1;
-			break;
-		}
-		token = strtok (NULL, "|");
+	pthread_mutex_lock(&g_mslog.lock_bucket[0]);//global flushing lock
+	size_t write_len = fwrite(g_mslog.io_buf, 1, g_mslog.io_buf_len, g_mslog.log_fp);
+	if ( write_len > 0 ){
+		g_mslog.io_buf_len = 0;//refresh buf
+		fflush(g_mslog.log_fp);
 	}
-	free(filter);
-	return match;
+	pthread_mutex_unlock(&g_mslog.lock_bucket[0]);
+}
+
+//auto do flush thread
+static void *flush_worker(void *arg){
+	(void)arg;
+	while ( g_mslog.flush_running ){
+		sleep(MSLOG_FLUSH_INTERVAL);
+		do_flush();
+	}
+	return NULL;
+}
+
+//bucket lock lock/unlock
+static inline void lock(mslog_level_t level){
+	if ( level >= MSLOG_LEVEL_MAX )
+		level = MSLOG_DEBUG;
+	pthread_mutex_lock(&g_mslog.lock_bucket[level]);
+}
+
+static inline void unlock(mslog_level_t level){
+	if ( level >= MSLOG_LEVEL_MAX )
+		level = MSLOG_DEBUG;
+	pthread_mutex_unlock(&g_mslog.lock_bucket[level]);
+}
+
+//-------------------------------interface--------------------------------//
+//get log level(no lock)
+mslog_level_t mslog_get_level(void){
+        mslog_level_t level = g_mslog.log_level;
+        return level;
 }
 
 //global config interface init
-void mslog_init(const char *log_path, size_t rotate_size, int rotate_num){
-	g_mslog.log_level = MSLOG_DEBUG;
-	g_mslog.enable_line_info = 1;
-	g_mslog.enable_stdout = 1;
-	g_mslog.rotate_size = (rotate_size == 0) ? MSLOG_DEFAULT_ROTATE_SIZE : rotate_size;
-	g_mslog.rotate_num = (rotate_num == 0) ? MSLOG_DEFAULT_ROTATE_NUM : rotate_num;
-	memset(g_mslog.tag_filter, 0, sizeof(g_mslog.tag_filter));
-	
+int mslog_init(const char *log_path, size_t rotate_size, int rotate_num){
+	//init bucket lock
+	for ( int i = 0; i < MSLOG_LEVEL_MAX; i++ ){
+		pthread_mutex_init(&g_mslog.lock_bucket[i], NULL);
+	}
+	pthread_mutex_init(&g_mslog.time_lock, NULL);
+
+	//setting log file path
 	if ( log_path != NULL && strlen(log_path) > 0 ){
-		strncpy(g_mslog.log_path, log_path, (sizeof(g_mslog.log_path) - 1));
+		strncpy(g_mslog.log_path, log_path, ( sizeof(g_mslog.log_path) - 1 ));
 	}
 	else{
 		strcpy(g_mslog.log_path, "./mslog.log");
 	}
 
-	//pthread_mutexattr_t attr;
-	//pthread_mutexattr_init(&attr);
-	//pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-	//pthread_mutex_init(&g_mslog.mutex, &attr);
-	//pthread_mutexattr_destroy(&attr);
-	
-	pthread_mutex_init(&g_mslog.mutex, NULL);
+	//setting rotate num & size
+	if ( rotate_size > 0 )
+		g_mslog.rotate_size = rotate_size;
+	if ( rotate_num > 0 )
+		g_mslog.rotate_num = rotate_num;
 
-	FILE *fp = fopen(g_mslog.log_path, "a");
-	if ( fp == NULL ){
-		perror("mslog init: open log file failed");
-		exit(EXIT_FAILURE);
+	//setting io buf
+	g_mslog.io_buf = (char *)malloc(MSLOG_IO_BUF_SIZE);
+	if ( g_mslog.io_buf == NULL ){
+		perror("malloc io buf failed");
+		return -1;
 	}
-	fclose(fp);
+	g_mslog.io_buf = 0;
+
+	//open log file
+	g_mslog.log_fp = fopen(g_mslog.log_path, "a+");
+	if ( g_mslog.log_fp == NULL ){
+		perror("fopen log file failed");
+		free(g_mslog.log_fp);
+		return -1;
+	}
+
+	//start auto flush thread
+	g_mslog.flush_running = 1;
+	if ( pthread_create(&g_mslog.flush_thread, NULL, flush_worker, NULL) != 0 ){
+		perror("pthread_create flush_thread failed");
+		fclose(g_mslog.log_fp);
+		free(g_mslog.io_buf);
+		g_mslog.flush_running = 0;
+		return -1;
+	}
+
+	//init time cache
+	update_time_cache();
+	
+	return 0;
 }
 
 //global config interface deinit
 void mslog_deinit(void){
-	pthread_mutex_destroy(&g_mslog.mutex);
+	//stop auto flush thread
+	g_mslog.flush_running = 0;
+	pthread_join(g_mslog.flush_thread, NULL);
+	
+	do_flush();
+	if ( g_mslog.log_fp != NULL ){
+		fclose(g_mslog.log_fp);
+		g_mslog.log_fp = NULL;
+	}
+	//release source
+	free(g_mslog.io_buf);
+	g_mslog.io_buf = NULL;
+
+	//destroy lock
+	for ( int i = 0; i < MSLOG_LEVEL_MAX; i++ ){
+		pthread_mutex_destroy(&g_mslog.lock_bucket[i]);
+	}
+	pthread_mutex_destroy(&g_mslog.time_lock);
+
+	//reset config
 	memset(&g_mslog, 0, sizeof(g_mslog));
 }
 
 //global config interface setting log level
 void mslog_set_level(mslog_level_t level){
-	if ( level >= 0 && level < MSLOG_LEVEL_MAX ){
-		pthread_mutex_lock(&g_mslog.mutex);
-		g_mslog.log_level = level;
-		pthread_mutex_unlock(&g_mslog.mutex);
-	}
+	if ( level >= MSLOG_LEVEL_MAX )
+		return;
+	lock(MSLOG_DEBUG);//use debug level modify
+	g_mslog.log_level = level;
+	unlock(MSLOG_DEBUG);
+}
+
+void mslog_set_flush_mode(mslog_flush_mode_t mode){
+	lock(MSLOG_DEBUG);
+	g_mslog.flush_mode = mode;
+	unlock(MSLOG_DEBUG);
 }
 
 void mslog_set_tag_filter(const char *tag_filter){
-	pthread_mutex_lock(&g_mslog.mutex);
-	if ( tag_filter != NULL ){
-		strncpy(g_mslog.tag_filter, tag_filter, (sizeof(&g_mslog.tag_filter) - 1));
-	}
-	else{
-		memset(g_mslog.tag_filter, 0, sizeof(&g_mslog.tag_filter));
-	}
-	pthread_mutex_unlock(&g_mslog.mutex);
+	if ( tag_filter == NULL )
+		return;
+	lock(MSLOG_DEBUG);
+	strncpy(g_mslog.tag_filter, tag_filter, ( sizeof(g_mslog.tag_filter) - 1 ));
+	unlock(MSLOG_DEBUG);
 }
 
-void mslog_enable_line_info(int enable){
-	pthread_mutex_lock(&g_mslog.mutex);
-	g_mslog.enable_line_info = ( enable ? 1 : 0 );
-	pthread_mutex_unlock(&g_mslog.mutex);
-}
-
-void mslog_enable_stdout(int enable){
-	pthread_mutex_lock(&g_mslog.mutex);
-	g_mslog.enable_stdout = ( enable ? 1 : 0 );
-	pthread_mutex_unlock(&g_mslog.mutex);
+void mslog_flush(void){
+	do_flush();
 }
 
 void mslog_core(mslog_level_t level, const char *tag, const char *file, int line, const char *func, const char *fmt, ...){
-	if ( level < 0 || level >= MSLOG_LEVEL_MAX || fmt == NULL ){
+	if ( !tag_match(tag) )
 		return;
-	}
+	
+	lock(level);
 
-	pthread_mutex_lock(&g_mslog.mutex);
+	char log_buf[MSLOG_MAX_LOG_LEN];
+	size_t len = 0;
 
-	if ( level < g_mslog.log_level || !mslog_tag_match(tag) ){
-		pthread_mutex_unlock(&g_mslog.mutex);
-		return;
-	}
+	update_time_cache();
+	const char *level_str[] = {"DEBUG","INFO","WARN","ERROR","FATAL"};
 
-	char log_buf[MSLOG_MAX_LOG_LEN] = {0};
+	//format: [time] [level] [tag] [file:line:func] msg
+	len += snprintf(log_buf + len, ( sizeof(log_buf) - len ),
+				"[%s][%s][%s] %s:%d:%s ",
+				g_mslog.time_cache,
+				level_str[level],
+				tag ? tag : NULL,
+				file, line, func );
+
 	va_list ap;
 	va_start(ap, fmt);
-
-	int len = 0;
-	len += snprintf(log_buf + len, ( sizeof(log_buf) - len ), 
-			"[%s][%s][%s]",
-			mslog_get_time(), g_level_str[level], ( tag ? tag : "NULL" ));
-
-	if ( g_mslog.enable_line_info ){
-		len += snprintf(log_buf + len, ( sizeof(log_buf) - len ), 
-				MSLOG_FILE_LINE_FMT, file, line, func);
-	}
 	len += vsnprintf(log_buf + len, ( sizeof(log_buf) - len ), fmt, ap);
 	va_end(ap);
 
-	//rotate check before write file
-	mslog_rotate();
-
-	FILE *fp = fopen(g_mslog.log_path, "a");
-	if (fp != NULL ){
-		fprintf(fp, "%s\n", log_buf);
-		fflush(fp);//force refresh
-		fclose(fp);
+	if ( len < ( sizeof(log_buf) - 1 ) ){
+		log_buf[len++] = '\n';
+		log_buf[len] = '\0';
 	}
 
-	if ( g_mslog.enable_stdout ){
-		printf("%s%s%s\n", g_level_color[level], log_buf, MS_COLOR_RESET);
-		fflush(stdout);
+	g_mslog.rotate_check_cnt++;
+	if ( g_mslog.rotate_check_cnt >= MSLOG_ROTATE_CHECK_CNT ){
+		mslog_rotate();
 	}
 
-	pthread_mutex_unlock(&g_mslog.mutex);
+	if ( g_mslog.flush_mode == MSLOG_FLUSH_REALTIME ){
+		if ( g_mslog.log_fp != NULL ){
+			fwrite(log_buf, 1, len, g_mslog.log_fp);
+			fflush(g_mslog.log_fp);
+		}
+		else{
+			if ( g_mslog.io_buf_len + len >= MSLOG_IO_BUF_SIZE ){
+				do_flush();
+			}
+			memcpy(g_mslog.io_buf + g_mslog.io_buf_len, log_buf, len);
+			g_mslog.io_buf_len += len;
+		}
+	}
+	unlock(level);
 }

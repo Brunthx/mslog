@@ -1,14 +1,15 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -O2 -std=c99
+CFLAGS = -Wall -Wextra -O2 -std=c99
 LDFLAGS = -lpthread #connect pthread
 
-TARGET = mslog_demo
-OBJS = main.o mslog.o
+TARGET = test_mslog
+
+SRCS = test_mslog.c mslog.c
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+$(TARGET): $(SRCS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.c mslog.h
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -17,6 +18,6 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -rf $(TARGET) $(OBJS) test_mslog.log*
+	rm -rf $(TARGET) *.log*
 
 .PHONY: all run clean
