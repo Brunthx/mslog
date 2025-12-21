@@ -44,7 +44,7 @@ static void update_time_cache(void);
 static void log_rotate(void);
 static void do_flush(void);
 static void *flush_worker(void *arg);
-static void update_write_stat(size_t write_len);
+static void update_write_stat(size_t write_len, mslog_level_t level);
 static int mslog_mmap_init(void);
 static void mslog_mmap_destroy(void);
 static int mslog_mmap_write(const char *buf, size_t len);
@@ -54,9 +54,9 @@ static int mem_pool_init(void);
 static void mem_pool_destroy(void);
 
 //-----------write count-----------//
-static void update_write_stat(size_t write_len){
+static void update_write_stat(size_t write_len, mslog_level_t level){
 	time_t now = time(NULL);
-	mslog_lock(MSLOG_INFO);
+	mslog_lock(level);
 	if ( now != g_mslog.last_stat_time ){
 		g_mslog.log_bytes_per_sec = write_len;
 		g_mslog.last_stat_time = now;
@@ -73,7 +73,7 @@ static void update_write_stat(size_t write_len){
 		g_mslog.log_bytes_per_sec += write_len;
 	}
 	g_total_write_bytes += write_len;
-	mslog_unlock(MSLOG_INFO);
+	mslog_unlock(level);
 }
 
 //------------mmap---------------//
@@ -141,7 +141,7 @@ static int mem_pool_init(void){
 			return -1;
 		}
 		node->buf = (char *)malloc(g_mslog.log_buf_pool.buf_size);
-		if ( node-> buf == NULL ){
+		if ( node->buf == NULL ){
 			free(node);
 			pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
 			return -1;
@@ -226,11 +226,10 @@ static void log_rotate(void){
 	fflush(g_mslog.log_fp);
 	struct stat st;
 
-	if ( st.st_size < 0 ){
+	if ( fstat(fileno(g_mslog.log_fp), &st) < 0){
 		return;
-	}
-
-	if ( fstat(fileno(g_mslog.log_fp), &st) < 0 || ( (size_t)st.st_size < g_mslog.rotate_size ) ){
+	} 
+	if ( ( (size_t)st.st_size < g_mslog.rotate_size ) ){
 		return;
 	}
 
@@ -440,7 +439,7 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 			fwrite(log_buf, 1, len, g_mslog.log_fp);
 		}
 		fflush(g_mslog.log_fp);
-		update_write_stat(len);
+		update_write_stat(len, level);
 	}
 	else
 	{
@@ -450,7 +449,7 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 		if ( g_mslog.curr_buf_used + len <= g_mslog.max_batch_threshold ){
 			memcpy(g_mslog.io_buf + g_mslog.curr_buf_used, log_buf, len);
 			g_mslog.curr_buf_used += len;
-			update_write_stat(len);
+			update_write_stat(len, level);
 		}
 
 		if ( (double)( g_mslog.curr_buf_used / g_mslog.max_batch_threshold > 0.8 ) ){
