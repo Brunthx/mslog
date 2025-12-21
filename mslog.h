@@ -34,7 +34,7 @@ typedef enum{
 typedef struct mslog_buf_node{
 	char *buf;
 	size_t size;
-	struct mslog_buf_node *next
+	struct mslog_buf_node *next;
 }mslog_buf_node_t;
 
 //mem pool struct
@@ -75,6 +75,7 @@ typedef struct{
 	char time_cache[32];
 	time_t last_time;
 	int rotate_check_cnt;
+	char tag_filter[1024];
 }mslog_global_t;
 
 //default config marco
