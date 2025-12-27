@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/mycapp.dir/mslog.c.o CMakeFiles/mycapp.dir/mslog_mem_pool.c.o CMakeFiles/mycapp.dir/mslog_thread.c.o CMakeFiles/mycapp.dir/mslog_utils.c.o CMakeFiles/mycapp.dir/test_mslog.c.o -o mycapp 

@@ -1,0 +1,32 @@
+[
+{
+  "directory": "/home/edison/project/devcode/mslog/build",
+  "command": "/usr/bin/cc   -std=gnu11 -o CMakeFiles/mycapp.dir/mslog.c.o -c /home/edison/project/devcode/mslog/mslog.c",
+  "file": "/home/edison/project/devcode/mslog/mslog.c",
+  "output": "CMakeFiles/mycapp.dir/mslog.c.o"
+},
+{
+  "directory": "/home/edison/project/devcode/mslog/build",
+  "command": "/usr/bin/cc   -std=gnu11 -o CMakeFiles/mycapp.dir/mslog_mem_pool.c.o -c /home/edison/project/devcode/mslog/mslog_mem_pool.c",
+  "file": "/home/edison/project/devcode/mslog/mslog_mem_pool.c",
+  "output": "CMakeFiles/mycapp.dir/mslog_mem_pool.c.o"
+},
+{
+  "directory": "/home/edison/project/devcode/mslog/build",
+  "command": "/usr/bin/cc   -std=gnu11 -o CMakeFiles/mycapp.dir/mslog_thread.c.o -c /home/edison/project/devcode/mslog/mslog_thread.c",
+  "file": "/home/edison/project/devcode/mslog/mslog_thread.c",
+  "output": "CMakeFiles/mycapp.dir/mslog_thread.c.o"
+},
+{
+  "directory": "/home/edison/project/devcode/mslog/build",
+  "command": "/usr/bin/cc   -std=gnu11 -o CMakeFiles/mycapp.dir/mslog_utils.c.o -c /home/edison/project/devcode/mslog/mslog_utils.c",
+  "file": "/home/edison/project/devcode/mslog/mslog_utils.c",
+  "output": "CMakeFiles/mycapp.dir/mslog_utils.c.o"
+},
+{
+  "directory": "/home/edison/project/devcode/mslog/build",
+  "command": "/usr/bin/cc   -std=gnu11 -o CMakeFiles/mycapp.dir/test_mslog.c.o -c /home/edison/project/devcode/mslog/test_mslog.c",
+  "file": "/home/edison/project/devcode/mslog/test_mslog.c",
+  "output": "CMakeFiles/mycapp.dir/test_mslog.c.o"
+}
+]
