@@ -1,3 +1,8 @@
+#include "mslog_mem_pool.h"
+#include "mslog_thread.h"
+#include "mslog_utils.h"
+#include <stdio.h>
+#include <time.h>
 #define _POSIX_C_SOURCE 200112L
 #include "mslog.h"
 
@@ -7,6 +12,7 @@ mslog_global_t g_mslog ={
 	.rotate_size = MSLOG_DEFAULT_ROTATE_SIZE,
 	.rotate_num = MSLOG_DEFAULT_ROTATE_NUM,
 	.flush_mode = MSLOG_DEFAULT_FLUSH_MODE,
+    .enable_console_color = MSLOG_DEFAULT_ENABLE_CONSOLE_COLOR,
 	.batch_threshold = MSLOG_DEFAULT_MIN_BATCH_THRESHOLD,
 	.max_batch_threshold = MSLOG_DEFAULT_MAX_BATCH_THRESHOLD,
 	.min_batch_threshold = MSLOG_DEFAULT_MIN_BATCH_THRESHOLD,
@@ -18,19 +24,11 @@ mslog_global_t g_mslog ={
 	.mmap_size = MSLOG_DEFAULT_MMAP_INIT_SIZE,
 	.mmap_offset = 0,
 	.mmap_min_file_size = MSLOG_DEFAULT_MMAP_MIN_FILE_SIZE,
-	.log_buf_pool = {
-		.free_list = NULL,
-		.buf_size = MSLOG_DEFAULT_LOG_BUF_SIZE,
-		.pool_size = MSLOG_DEFAULT_LOG_BUF_POOL_SIZE,
-		.pool_mutex = PTHREAD_MUTEX_INITIALIZER,
-	},
 	.log_fp = NULL,
-	.flush_thread = 0,
-	.flush_running = 0,
 	.time_cache = {0},
 	.last_time = 0,
 	.rotate_check_cnt = 0,
-	.tag_filter = ""
+	//.tag_filter = ""
 };
 
 //stat cnt var
@@ -38,22 +36,13 @@ static size_t g_total_write_bytes = 0;
 static size_t g_total_flush_time = 0;
 static size_t g_flush_count = 0;
 
-//tool func pre-define
-static int tag_match(const char *tag);
-static void update_time_cache(void);
-static void log_rotate(void);
-static void do_flush(void);
-static void *flush_worker(void *arg);
+//-----------func pre-define only use in core module--------------------//
 static void update_write_stat(size_t write_len, mslog_level_t level);
 static int mslog_mmap_init(void);
 static void mslog_mmap_destroy(void);
 static int mslog_mmap_write(const char *buf, size_t len);
-static mslog_buf_node_t *mem_pool_alloc(void);
-static void mem_pool_free(mslog_buf_node_t *node);
-static int mem_pool_init(void);
-static void mem_pool_destroy(void);
-
-//-----------write count-----------//
+static void mslog_output(mslog_level_t level, const char *log_content, size_t len);
+//----------------------------write count------------------------------//
 static void update_write_stat(size_t write_len, mslog_level_t level){
 	time_t now = time(NULL);
 	mslog_lock(level);
@@ -85,7 +74,7 @@ static int mslog_mmap_init(void){
 	int fd = fileno(g_mslog.log_fp);
 	off_t file_size = lseek(fd, 0, SEEK_END);
 	if ( file_size < 0 ){
-		return -1;
+		return -2;
 	}
 
 	if ( (size_t)file_size < g_mslog.mmap_min_file_size ){
@@ -129,179 +118,26 @@ static int mslog_mmap_write(const char *buf, size_t len){
 	msync(g_mslog.mmap_buf, g_mslog.mmap_offset, MS_ASYNC);
 	return 0;
 }
+//------------------log input file write + console print--------------//
+static void mslog_output(mslog_level_t level, const char *log_content, size_t len){
+    if ( g_mslog.log_fp != NULL ){
+        if ( mslog_mmap_write(log_content, len) != 0 ) {
+            fwrite(log_content, 1, len, g_mslog.log_fp);
+        }
+        fflush(g_mslog.log_fp);
+    }
 
-//---------------mem pool--------------//
-static int mem_pool_init(void){
-	pthread_mutex_lock(&g_mslog.log_buf_pool.pool_mutex);
-
-	for ( size_t i = 0; i < g_mslog.log_buf_pool.pool_size; i++ ){
-		mslog_buf_node_t *node = (mslog_buf_node_t *)malloc(sizeof(mslog_buf_node_t));
-		if ( node == NULL ){
-			pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-			return -1;
-		}
-		node->buf = (char *)malloc(g_mslog.log_buf_pool.buf_size);
-		if ( node->buf == NULL ){
-			free(node);
-			pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-			return -1;
-		}
-		node->size = g_mslog.log_buf_pool.buf_size;
-		node->next = g_mslog.log_buf_pool.free_list;
-		g_mslog.log_buf_pool.free_list = node;
-	}
-	pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-	return 0;
+    if ( g_mslog.enable_console_color ){
+        fprintf(stdout, "%s%s%s", mslog_get_level_color(level), log_content, MSLOG_COLOR_RESET);
+    }
+    else {
+        fprintf(stdout, "%s", log_content);
+    }
+    fflush(stdout);
 }
-
-static void mem_pool_destroy(void){
-	pthread_mutex_lock(&g_mslog.log_buf_pool.pool_mutex);
-	mslog_buf_node_t *curr = g_mslog.log_buf_pool.free_list;
-	while ( curr != NULL ){
-		mslog_buf_node_t *next =curr->next;
-		free(curr->buf);
-		free(curr);
-		curr = next;
-	}
-	g_mslog.log_buf_pool.free_list = NULL;
-	pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-}
-
-static mslog_buf_node_t *mem_pool_alloc(void){
-	pthread_mutex_lock(&g_mslog.log_buf_pool.pool_mutex);
-	mslog_buf_node_t *node = g_mslog.log_buf_pool.free_list;
-	if ( node != NULL ){
-		g_mslog.log_buf_pool.free_list = node->next;
-	}
-	pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-	return node;
-}
-
-static void mem_pool_free(mslog_buf_node_t *node){
-	if ( node == NULL ){
-		return;
-	}
-	pthread_mutex_lock(&g_mslog.log_buf_pool.pool_mutex);
-	node->next = g_mslog.log_buf_pool.free_list;
-	g_mslog.log_buf_pool.free_list = node;
-	pthread_mutex_unlock(&g_mslog.log_buf_pool.pool_mutex);
-}
-
-//----------------tool func tag match-----------------//
-static int tag_match(const char *tag){
-	if ( g_mslog.log_path[0] == '\0' || tag == NULL ){
-		return 1;
-	}
-
-	char filter_copy[1024];
-	strncpy(filter_copy, g_mslog.tag_filter, ( sizeof(filter_copy) - 1 ));
-	filter_copy[sizeof(filter_copy) - 1] = '\0';
-
-	char *token = strtok(filter_copy, "|");
-	while( token != NULL ){
-		if ( strcmp(token, tag) == 0 ){
-			return 1;
-		}
-		token = strtok(NULL, "|");
-	}
-	return 0;
-}
-
-//--------------------tool func time cache refresh--------------------//
-static void update_time_cache(void){
-	time_t now = time(NULL);
-	if ( now != g_mslog.last_time ){
-		struct tm *tm =localtime(&now);
-		strftime(g_mslog.time_cache, sizeof(g_mslog.time_cache), "%Y-%m-%d %H:%M:$S", tm);
-		g_mslog.last_time = now;
-	}
-}
-
-//--------------------tool func log rotate---------------------//
-static void log_rotate(void){
-	if ( g_mslog.log_fp == NULL || g_mslog.rotate_size <= 0 || g_mslog.rotate_num <= 0 ){
-		return;
-	}
-
-	fflush(g_mslog.log_fp);
-	struct stat st;
-
-	if ( fstat(fileno(g_mslog.log_fp), &st) < 0){
-		return;
-	} 
-	if ( ( (size_t)st.st_size < g_mslog.rotate_size ) ){
-		return;
-	}
-
-	char old_path[256];
-	char new_path[256];
-	const size_t max_path_len = sizeof(old_path) - 12;
-	size_t log_path_len = strlen(g_mslog.log_path);
-	if ( log_path_len >= max_path_len ){
-		return;
-	}
-
-	mslog_mmap_destroy();
-
-	for ( int i = g_mslog.rotate_num -1; i > 0; i-- ){
-		snprintf(old_path, sizeof(old_path), "%s.%d", g_mslog.log_path, i);
-		snprintf(new_path, sizeof(new_path), "%s.%d", g_mslog.log_path, i + 1);
-		rename(old_path, new_path);
-	}
-
-	snprintf(old_path, sizeof(old_path), "%s.1", g_mslog.log_path);
-	fclose(g_mslog.log_fp);
-	rename(g_mslog.log_path, old_path);
-
-	g_mslog.log_fp = fopen(g_mslog.log_path, "a");
-	if ( g_mslog.log_fp == NULL )
-		return;
-
-	mslog_mmap_init();
-}
-
-//------------------tool func do flush---------------//
-static void do_flush(void){
-	if ( g_mslog.log_fp == NULL || g_mslog.curr_buf_used == 0 || g_mslog.io_buf == NULL ){
-		return;
-	}
-
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
-	mslog_lock(MSLOG_INFO);
-	if ( mslog_mmap_write(g_mslog.io_buf, g_mslog.curr_buf_used) != 0 ){
-		fwrite(g_mslog.io_buf, 1, g_mslog.curr_buf_used, g_mslog.log_fp);
-	}
-	fflush(g_mslog.log_fp);
-	g_mslog.curr_buf_used = 0;
-	mslog_unlock(MSLOG_INFO);
-
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	size_t flush_time = ( end.tv_sec - start.tv_sec ) * 1000000 + ( end.tv_nsec - start.tv_nsec ) / 1000;
-	g_total_flush_time += flush_time;
-	g_flush_count++;
-}
-
-//---------------------tool func flush thread-----------------------//
-static void *flush_worker(void *arg){
-	(void)arg;
-	while ( g_mslog.flush_running ){
-		sleep(MSLOG_FLUSH_INTERVAL);
-		do_flush();
-
-		g_mslog.rotate_check_cnt++;
-		if ( g_mslog.rotate_check_cnt >= MSLOG_ROTATE_CHECK_CNT_MAX ){
-			log_rotate();
-			g_mslog.rotate_check_cnt = 0;
-		}
-	}
-	do_flush();
-	return NULL;
-}
-
 //---------------------output interface init--------------------------//
-int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size, int rotate_num, mslog_flush_mode_t flush_mode){
+int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size, 
+        int rotate_num, mslog_flush_mode_t flush_mode, int enable_console_color){
 	for ( int i = 0; i < MSLOG_LEVEL_MAX; i++ ){
 		pthread_mutex_init(&g_mslog.level_mutex[i], NULL);
 	}
@@ -320,13 +156,14 @@ int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size
 		g_mslog.rotate_num = rotate_num;
 	}
 	g_mslog.flush_mode = flush_mode;
+    g_mslog.enable_console_color = ( enable_console_color == 1 ) ? 1 : 0;
 
 	g_mslog.io_buf = (char *)malloc(g_mslog.max_batch_threshold);
 	if ( g_mslog.io_buf == NULL ){
 		goto err_mutex;
 	}
 
-	if ( mem_pool_init() != 0 ){
+	if ( mslog_mem_pool_init() != 0 ){
 		goto err_io_buf;
 	}
 
@@ -338,14 +175,13 @@ int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size
 	mslog_mmap_init();
 
 	if ( g_mslog.flush_mode == MSLOG_FLUSH_BATCH ){
-		g_mslog.flush_running = 1;
-		if ( pthread_create(&g_mslog.flush_thread, NULL, flush_worker, NULL) != 0 ){
-			g_mslog.flush_running = 0;
+		if ( mslog_thread_init(&g_mslog.flush_thread, MSLOG_FLUSH_INTERVAL, 
+                    MSLOG_ROTATE_CHECK_CNT_MAX, &g_mslog) != 0 ){
 			goto err_log_fp;
 		}
 	}
 
-	update_time_cache();
+	mslog_utils_update_time_cache(g_mslog.time_cache, &g_mslog.last_time, sizeof(g_mslog.time_cache));
 	return 0;
 
 err_log_fp:
@@ -354,7 +190,7 @@ err_log_fp:
 	mslog_mmap_destroy();
 
 err_mem_pool:
-	mem_pool_destroy();
+	mslog_mem_pool_destroy(&g_mslog.log_buf_pool);
 
 err_io_buf:
 	free(g_mslog.io_buf);
@@ -369,12 +205,9 @@ err_mutex:
 
 //-------------------------output interface deinit-------------------------//
 void mslog_deinit(void){
-	g_mslog.flush_running = 0;
-	if ( g_mslog.flush_thread != 0 ){
-		pthread_join(g_mslog.flush_thread, NULL);
+	if (g_mslog.flush_mode == MSLOG_FLUSH_BATCH) {
+	    mslog_thread_destroy(&g_mslog.flush_thread);
 	}
-
-	do_flush();
 
 	mslog_mmap_destroy();
 
@@ -383,7 +216,7 @@ void mslog_deinit(void){
 		g_mslog.log_fp = NULL;
 	}
 
-	mem_pool_destroy();
+	mslog_mem_pool_destroy(&g_mslog.log_buf_pool);
 
 	if ( g_mslog.io_buf != NULL ){
 		free(g_mslog.io_buf);
@@ -396,16 +229,17 @@ void mslog_deinit(void){
 }
 
 //-------------------output interface log write----------------------//
-void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, const char *func, const char *fmt, ...){
+void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, 
+        const char *func, const char *fmt, ...){
 	if ( level < 0 || level >= MSLOG_LEVEL_MAX || level < g_mslog.log_level ){
 		return;
 	}
 
-	if ( !tag_match(tag) ){
+	if ( !mslog_utils_tag_match(tag, g_mslog.log_path) ){
 		return;
 	}
 
-	mslog_buf_node_t *log_node = mem_pool_alloc();
+	mslog_buf_node_t *log_node = mslog_mem_pool_alloc(&g_mslog.log_buf_pool);
 	if ( log_node == NULL ){
 		return;
 	}
@@ -415,7 +249,7 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 
 	const char *level_str[] = {"DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
-	update_time_cache();
+	mslog_utils_update_time_cache(g_mslog.time_cache, &g_mslog.last_time, sizeof(g_mslog.time_cache));
 	len += snprintf(log_buf + len, buf_size - len,
 			"[%s] [%s] [%s] %s:%d:%s",
 			g_mslog.time_cache,
@@ -434,17 +268,20 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 	}
 
 	mslog_lock(level);
-	if ( g_mslog.flush_mode == MSLOG_FLUSH_REALTIME ){
-		if ( mslog_mmap_write(log_buf, len) != 0 ){
-			fwrite(log_buf, 1, len, g_mslog.log_fp);
-		}
-		fflush(g_mslog.log_fp);
+	if ( g_mslog.flush_mode == MSLOG_FLUSH_REAL_TIME ){
+		mslog_output(level, log_buf, len);
 		update_write_stat(len, level);
+        g_mslog.rotate_check_cnt++;
+        if ( g_mslog.rotate_check_cnt >= MSLOG_ROTATE_CHECK_CNT_MAX ) {
+            mslog_utils_log_rotate(&g_mslog);
+            g_mslog.rotate_check_cnt = 0;
+        }
 	}
 	else
 	{
 		if ( g_mslog.curr_buf_used + len > g_mslog.batch_threshold ){
-			do_flush();
+			mslog_thread_destroy(&g_mslog.flush_thread);
+            mslog_thread_init(&g_mslog.flush_thread, MSLOG_FLUSH_INTERVAL, MSLOG_ROTATE_CHECK_CNT_MAX, &g_mslog);
 		}
 		if ( g_mslog.curr_buf_used + len <= g_mslog.max_batch_threshold ){
 			memcpy(g_mslog.io_buf + g_mslog.curr_buf_used, log_buf, len);
@@ -453,18 +290,13 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 		}
 
 		if ( (double)( g_mslog.curr_buf_used / g_mslog.max_batch_threshold > 0.8 ) ){
-			do_flush();
+			mslog_thread_destroy(&g_mslog.flush_thread);
+            mslog_thread_init(&g_mslog.flush_thread, MSLOG_FLUSH_INTERVAL, MSLOG_ROTATE_CHECK_CNT_MAX, &g_mslog);
 		}
 	}
 	mslog_unlock(level);
 
-	mem_pool_free(log_node);
-
-	g_mslog.rotate_check_cnt++;
-	if ( g_mslog.rotate_check_cnt >= MSLOG_ROTATE_CHECK_CNT_MAX ){
-		log_rotate();
-		g_mslog.rotate_check_cnt = 0;
-	}
+	mslog_mem_pool_free(&g_mslog.log_buf_pool, log_node);
 }
 
 //------------------------output interface get stat-------------------//
