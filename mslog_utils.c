@@ -1,4 +1,5 @@
 #include "mslog_utils.h"
+#include "mslog.h"
 
 int mslog_utils_tag_match(const char *tag, const char *log_path){
 	if ( log_path == NULL || log_path[0] == '\0' || tag == NULL ){

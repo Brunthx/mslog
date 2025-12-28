@@ -1,10 +1,13 @@
+#pragma once
+
 #ifndef __MSLOG_THREAD_H__
 #define __MSLOG_THREAD_H__
 
 #define _POSIX_C_SOURCE 200112L
 #include <pthread.h>
-#include "mslog.h"
+#include <stddef.h>
 
+typedef struct mslog_global mslog_global_t;
 typedef struct{
 	pthread_t thread_id;
 	volatile int running;

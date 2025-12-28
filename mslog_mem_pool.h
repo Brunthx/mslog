@@ -1,3 +1,4 @@
+#pragma once
 #ifndef __MSLOG_MEM_POOL_H__
 #define __MSLOG_MEM_POOL_H__
 

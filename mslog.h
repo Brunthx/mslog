@@ -43,7 +43,7 @@ typedef enum{
 }mslog_flush_mode_t;
 
 //log global config struct
-typedef struct{
+struct mslog_global{
 	char log_path[256];
 	mslog_level_t log_level;
 	size_t rotate_size;
@@ -73,7 +73,9 @@ typedef struct{
 	time_t last_time;
 	int rotate_check_cnt;
 	//char tag_filter[1024];
-}mslog_global_t;
+};
+
+typedef struct mslog_global mslog_global_t;
 
 //default config marco
 #define MSLOG_DEFAULT_LOG_PATH			    ( "./mslog.log" )
@@ -97,7 +99,7 @@ typedef struct{
 //log output interface
 int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size, 
         int rotate_num, mslog_flush_mode_t flush_mode, int enable_console_color);
-static inline mslog_deinit_default(const char *log_path, mslog_level_t log_level, 
+static inline int mslog_deinit_default(const char *log_path, mslog_level_t log_level, 
         size_t rotate_size, int rotate_num, mslog_flush_mode_t flush_mode){
     return mslog_init(log_path, log_level, rotate_size, rotate_num, flush_mode, MSLOG_DEFAULT_ENABLE_CONSOLE_COLOR);
 }
