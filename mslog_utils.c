@@ -37,7 +37,7 @@ void mslog_utils_update_time_cache(char *time_cache, time_t *last_time, size_t c
 	}
 
 	strftime(time_cache, cache_size, "%Y-%m-%d %H:%M:%S", tm);
-	*last_time = tm;
+	*last_time = now;
 }
 
 void mslog_utils_log_rotate(mslog_global_t *g_mslog){
