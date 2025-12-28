@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include "mslog_utils.h"
 #include "mslog.h"
 
@@ -27,9 +28,9 @@ void mslog_utils_update_time_cache(char *time_cache, time_t *last_time, size_t c
 
 	time_t now = time(NULL);//sec
 
+    struct tm tm_buf;
+    struct tm *tm = localtime_r(&now,&tm_buf);
 	if ( now != *last_time ){
-		struct tm tm_buf;
-		struct tm *tm = localtime_r(&now, &tm_buf);
 		if ( tm == NULL ){
 			snprintf(time_cache, cache_size, "UnknownTime");
 			return;
@@ -88,7 +89,7 @@ void mslog_utils_log_rotate(mslog_global_t *g_mslog){
 	}
 
 	off_t new_file_size = lseek(fileno(g_mslog->log_fp), 0, SEEK_END);
-	if ( new_file_size >= g_mslog->mmap_min_file_size ){
+	if ( (size_t)new_file_size >= g_mslog->mmap_min_file_size ){
 		g_mslog->mmap_buf = mmap(NULL, g_mslog->mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(g_mslog->log_fp), 0);
 		if ( g_mslog->mmap_buf != MAP_FAILED ){
 			g_mslog->mmap_offset = new_file_size;

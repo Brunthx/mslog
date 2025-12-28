@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include "mslog_thread.h"
 #include "mslog.h"
 #include "mslog_utils.h"

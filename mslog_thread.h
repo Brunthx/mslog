@@ -3,7 +3,6 @@
 #ifndef __MSLOG_THREAD_H__
 #define __MSLOG_THREAD_H__
 
-#define _POSIX_C_SOURCE 200112L
 #include <pthread.h>
 #include <stddef.h>
 

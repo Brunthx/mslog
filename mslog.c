@@ -1,9 +1,9 @@
+#define _POSIX_C_SOURCE 200112L
 #include "mslog_mem_pool.h"
 #include "mslog_thread.h"
 #include "mslog_utils.h"
 #include <stdio.h>
 #include <time.h>
-#define _POSIX_C_SOURCE 200112L
 #include "mslog.h"
 
 mslog_global_t g_mslog ={
@@ -32,9 +32,9 @@ mslog_global_t g_mslog ={
 };
 
 //stat cnt var
-static size_t g_total_write_bytes = 0;
-static size_t g_total_flush_time = 0;
-static size_t g_flush_count = 0;
+size_t g_total_write_bytes = 0;
+size_t g_total_flush_time = 0;
+size_t g_flush_count = 0;
 
 //-----------func pre-define only use in core module--------------------//
 static void update_write_stat(size_t write_len, mslog_level_t level);
@@ -163,7 +163,7 @@ int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size
 		goto err_mutex;
 	}
 
-	if ( mslog_mem_pool_init() != 0 ){
+	if ( mslog_mem_pool_init(&g_mslog.log_buf_pool, MSLOG_DEFAULT_MIN_BATCH_THRESHOLD, 10) != 0 ){
 		goto err_io_buf;
 	}
 
@@ -205,6 +205,15 @@ err_mutex:
 
 //-------------------------output interface deinit-------------------------//
 void mslog_deinit(void){
+    if ( g_mslog.log_fp != NULL ) {
+        if ( g_mslog.curr_buf_used > 0 && g_mslog.io_buf != NULL) {
+            fwrite(g_mslog.io_buf, 1, g_mslog.curr_buf_used, g_mslog.log_fp);
+            g_mslog.curr_buf_used = 0;
+        }
+        fflush(g_mslog.log_fp);
+        fsync(fileno(g_mslog.log_fp));
+    }
+
 	if (g_mslog.flush_mode == MSLOG_FLUSH_BATCH) {
 	    mslog_thread_destroy(&g_mslog.flush_thread);
 	}

@@ -3,7 +3,6 @@
 #ifndef __MSLOG_UTILS_H__
 #define __MSLOG_UTILS_H__
 
-#define _POSIX_C_SOURCE 200112L
 #include <stddef.h>
 #include <time.h>
 

@@ -1,7 +1,6 @@
 #ifndef __MSLOG_H__
 #define __MSLOG_H__
 
-#define _POSIX_C_SOURCE 200112L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,14 +98,14 @@ typedef struct mslog_global mslog_global_t;
 //log output interface
 int mslog_init(const char *log_path, mslog_level_t log_level, size_t rotate_size, 
         int rotate_num, mslog_flush_mode_t flush_mode, int enable_console_color);
-static inline int mslog_deinit_default(const char *log_path, mslog_level_t log_level, 
+static inline int mslog_init_default(const char *log_path, mslog_level_t log_level, 
         size_t rotate_size, int rotate_num, mslog_flush_mode_t flush_mode){
     return mslog_init(log_path, log_level, rotate_size, rotate_num, flush_mode, MSLOG_DEFAULT_ENABLE_CONSOLE_COLOR);
 }
 void mslog_deinit();
 void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, 
         const char *func, const char *fmt, ...);
-void mslog_get_stats(size_t *total_write_bytes, size_t *avg_flush_time, size_t *bu_usage_rate);
+void mslog_get_stats(size_t *total_write_bytes, size_t *avg_flush_time, size_t *buf_usage_rate);
 
 //log marco define
 #define MSLOG_DEBUG(tag, fmt, ...)\
