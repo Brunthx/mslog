@@ -125,6 +125,7 @@ static void mslog_output(mslog_level_t level, const char *log_content, size_t le
             fwrite(log_content, 1, len, g_mslog.log_fp);
         }
         fflush(g_mslog.log_fp);
+        fsync(fileno(g_mslog.log_fp));
     }
 
     if ( g_mslog.enable_console_color ){
