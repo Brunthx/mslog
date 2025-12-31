@@ -4,19 +4,13 @@
 #define __MSLOG_THREAD_H__
 
 #include <pthread.h>
-#include <stddef.h>
+#include <unistd.h>
 
-typedef struct mslog_global mslog_global_t;
-typedef struct{
-	pthread_t thread_id;
-	volatile int running;
-	int flush_interval;
-	int rotate_check_cnt_max;
-	mslog_global_t *log_ctx;
-}mslog_thread_ctx_t;
+#define MSLOG_THREAD_DETACHED		( 1 )
+#define MSLOG_THREAD_JOINABLE		( 0 )
 
-int mslog_thread_init(mslog_thread_ctx_t *thread_ctx, int flush_interval, int rotate_check_cnt_max, mslog_global_t *log_ctx);
-
-void mslog_thread_destroy(mslog_thread_ctx_t *thread_ctx);
+int mslog_thread_create(pthread_t *tid, int detach_mode, void *(*func)(void*), void *arg);
+int mslog_thread_join(pthread_t tid);
+void mslog_thread_sleep_ms(int ms);
 
 #endif//__MSLOG_THREAD_H__
