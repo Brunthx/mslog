@@ -1,98 +1,54 @@
 #define _POSIX_C_SOURCE 200112L
 #include "mslog_utils.h"
-#include "mslog.h"
 
-int mslog_utils_tag_match(const char *tag, const char *log_path){
-	if ( log_path == NULL || log_path[0] == '\0' || tag == NULL ){
-		return 1;
+int mslog_utils_get_file_size(const char *file_path){
+	if ( file_path == NULL )
+	{
+		return -1;
 	}
-
-	char filter_copy[1024];
-	strncpy(filter_copy, log_path, ( sizeof(filter_copy) - 1 ));
-	filter_copy[sizeof(filter_copy) - 1] = '\0';
-
-	char *token = strtok(filter_copy, "|");
-	while ( token != NULL ){
-		if ( strcmp(token, tag) == 0 ){
-			return 1;
-		}
-		token = strtok(NULL, "|");
-	}
-	return 0;
-}
-
-void mslog_utils_update_time_cache(char *time_cache, time_t *last_time, size_t cache_size){
-	if ( time_cache == NULL || last_time == NULL || cache_size < 32 ){
-		return;
-	}
-
-	time_t now = time(NULL);//sec
-
-    struct tm tm_buf;
-    struct tm *tm = localtime_r(&now,&tm_buf);
-	if ( now != *last_time ){
-		if ( tm == NULL ){
-			snprintf(time_cache, cache_size, "UnknownTime");
-			return;
-		}
-	}
-
-	strftime(time_cache, cache_size, "%Y-%m-%d %H:%M:%S", tm);
-	*last_time = now;
-}
-
-void mslog_utils_log_rotate(mslog_global_t *g_mslog){
-	if ( g_mslog == NULL || g_mslog->log_fp == NULL || g_mslog->rotate_size <= 0 || g_mslog->rotate_num <= 0 ){
-		return;
-	}
-
-	fflush(g_mslog->log_fp);
 
 	struct stat st;
-	int fd = fileno(g_mslog->log_fp);
-	if ( fd < 0 || fstat(fd, &st) < 0 ){
+	if ( stat(file_path, &st) != 0 )
+	{
+		return -1;
+	}
+	return st.st_size;
+}
+
+int mslog_utils_is_file_exist(const char *file_path){
+	return (access(file_path, F_OK) == 0) ? 1 : 0;
+}
+
+void mslog_utils_get_time_str(char *buf, int buf_len){
+	if ( buf == NULL || buf_len <= 0 )
+	{
 		return;
 	}
 
-	if ( (size_t)st.st_size < g_mslog->rotate_size ){
-		return;
+	time_t now = time(NULL);
+	struct tm *tm_now = localtime(&now);
+	snprintf(buf, buf_len, "%04d%02d%02d%02d%02d%02d",
+             tm_now->tm_year+1900, tm_now->tm_mon+1, tm_now->tm_mday,
+             tm_now->tm_hour, tm_now->tm_min, tm_now->tm_sec);
+}
+
+int mslog_utils_log_rotate(const char *base_path, int max_count){
+	if ( base_path == NULL || max_count <= 0 )
+	{
+		return -1;
 	}
+	
+	char src_path[512] = {0}, dst_path[512] = {0};
 
-	char old_path[256];
-	char new_path[256];
-	const size_t max_path_len = sizeof(old_path) - 12;
-	size_t log_path_len = strlen(g_mslog->log_path);
-	if ( log_path_len >= max_path_len ){
-		return;
-	}
-
-	if ( g_mslog->mmap_buf != MAP_FAILED ){
-		msync(g_mslog->mmap_buf, g_mslog->mmap_offset, MS_SYNC);
-		munmap(g_mslog->mmap_buf, g_mslog->mmap_size);
-		g_mslog->mmap_buf = MAP_FAILED;
-		g_mslog->mmap_offset = 0;
-	}
-
-	for ( int i = g_mslog->rotate_num -1; i > 0; i-- ){
-		snprintf(old_path, sizeof(old_path), "%s.%d", g_mslog->log_path, i);
-		snprintf(new_path, sizeof(new_path), "%s.%d", g_mslog->log_path, i + 1);
-		rename(old_path, new_path);
-	}
-
-	snprintf(old_path, sizeof(old_path), "%s.1", g_mslog->log_path);
-	fclose(g_mslog->log_fp);
-	rename(g_mslog->log_path, old_path);
-
-	g_mslog->log_fp = fopen(g_mslog->log_path, "a");
-	if ( g_mslog->log_fp == NULL ){
-		return;
-	}
-
-	off_t new_file_size = lseek(fileno(g_mslog->log_fp), 0, SEEK_END);
-	if ( (size_t)new_file_size >= g_mslog->mmap_min_file_size ){
-		g_mslog->mmap_buf = mmap(NULL, g_mslog->mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(g_mslog->log_fp), 0);
-		if ( g_mslog->mmap_buf != MAP_FAILED ){
-			g_mslog->mmap_offset = new_file_size;
+	for (int i = max_count; i > 0; i--)
+	{
+		snprintf(src_path, sizeof(src_path), "%s.%d", base_path, i - 1);
+		snprintf(dst_path, sizeof(dst_path), "%s.%d", base_path, i);
+		if ( mslog_utils_is_file_exist(src_path) )
+		{
+			rename(src_path, dst_path);
 		}
 	}
+	rename(base_path, dst_path);
+	return 0;
 }
