@@ -15,7 +15,7 @@ int mslog_mem_pool_init(void){
         return -1;
     }
     memset(g_mslog_mem_pool.pool_buf, 0, g_mslog_mem_pool.pool_size);
-    pthread_mutex_init(&g_mslog_mem_pool.pool_mutex);
+    pthread_mutex_init(&g_mslog_mem_pool.pool_mutex, NULL);
     return 0;
 }
 
