@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
 #include "mslog.h"
 
 mslog_global_t g_mslog = {
@@ -50,11 +49,11 @@ static const char *mslog_level2color(mslog_level_t level){
 }
 
 static void mslog_update_stat(size_t len){
-	pthread_mutex_lock(&g_mslog.log_mutex);
+	//pthread_mutex_lock(&g_mslog.log_mutex);//mutex lock only use in multi-thread, can't use in single thread
 	g_mslog.total_write_bytes += len;
 	g_mslog.total_flush_time++;
 	g_mslog.rotate_check_cnt++;
-	pthread_mutex_unlock(&g_mslog.log_mutex);
+	//pthread_mutex_unlock(&g_mslog.log_mutex);
 }
 
 static void mslog_output(mslog_level_t level, const char *log_buf, size_t len){
@@ -101,8 +100,6 @@ int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max
 	{
 		return -2;
 	}
-	
-	setvbuf(g_mslog.log_fp, NULL, _IONBF, 0);//for test
 
 	return 0;
 }
@@ -122,17 +119,15 @@ void mslog_deinit(void){
 }
 
 void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, const char *func, const char *fmt, ...){
-	//mark for test
-	//if ( level < g_mslog.log_level || level >= MSLOG_LEVEL_MAX )
-	//{
-	//	return;
-	//}
+	if ( level < g_mslog.log_level || level >= MSLOG_LEVEL_MAX )
+	{
+		return;
+	}
 	
-	//mark for test
-	//if ( tag == NULL || fmt == NULL )
-	//{
-	//	return;
-	//}
+	if ( tag == NULL || fmt == NULL )
+	{
+		return;
+	}
 
 	char time_buf[32] = {0};
 	char log_buf[MSLOG_LOG_BUF_SIZE] = {0};

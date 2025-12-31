@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
 #include "mslog_thread.h"
 
 int mslog_thread_create(pthread_t *tid, int detach_mode, void *(*func)(void*), void *arg){
@@ -24,9 +23,12 @@ int mslog_thread_join(pthread_t tid){
 }
 
 void mslog_thread_sleep_ms(int ms){
-    if ( ms > 0 )
+    if ( ms <= 0 )
     {
-        usleep(1000 * ms);
+        return;
     }
-    
+    struct timespec ts = {0};
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = ( ms % 1000 ) * 1000000L;
+    nanosleep(&ts, NULL);
 }

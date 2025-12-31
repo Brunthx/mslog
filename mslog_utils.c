@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
 #include "mslog_utils.h"
 
 int mslog_utils_get_file_size(const char *file_path){

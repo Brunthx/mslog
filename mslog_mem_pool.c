@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
 #include "mslog_mem_pool.h"
 
 mslog_mem_pool_t g_mslog_mem_pool = {
@@ -9,7 +8,7 @@ mslog_mem_pool_t g_mslog_mem_pool = {
 
 int mslog_mem_pool_init(void){
     g_mslog_mem_pool.pool_size = MSLOG_MEM_POOL_BLOCK_SIZE * MSLOG_MEM_POOL_MAX_BLOCKS;
-    g_mslog_mem_pool.pool_buf = (char *)malloc(g_mslog_mem_pool.pool_buf);
+    g_mslog_mem_pool.pool_buf = (char *)malloc(g_mslog_mem_pool.pool_size);
     if ( g_mslog_mem_pool.pool_buf == NULL )
     {
         return -1;
