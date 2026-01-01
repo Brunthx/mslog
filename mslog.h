@@ -47,7 +47,9 @@ typedef struct{
 	int rotate_check_cnt;
 	pthread_mutex_t log_mutex;
 	int enable_console_color;
-    
+    FILE *batch_buf;
+	size_t batch_buf_total;
+	size_t batch_buf_used;
 }mslog_global_t;
 
 extern mslog_global_t g_mslog;
@@ -72,6 +74,7 @@ extern mslog_global_t g_mslog;
 //default config marco
 #define MSLOG_ROTATE_CHECK_MAX			( 100 )
 #define MSLOG_LOG_BUF_SIZE				( 2048 )
+#define MSLOG_BATCH_BUF_SIZE			( 16 * 1024 )
 
 //log output interface
 int mslog_init_default(const char *log_path, mslog_level_t log_level, 

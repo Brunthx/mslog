@@ -43,7 +43,7 @@ void print_stat() {
 }
 
 int main() {
-    if (mslog_init_default("/tmp/mslog.log", MSLOG_INFO, 1024*1024, 3, MSLOG_FLUSH_REAL_TIME) != 0) {
+    if (mslog_init_default("/tmp/mslog.log", MSLOG_INFO, 1024*1024, 3, MSLOG_FLUSH_BATCH) != 0) {//two mode: 1. MSLOG_FLUSH_REAL_TIME 2. MSLOG_FLUSH_BATCH
         printf("日志库初始化失败！\n");
         return -1;
     }

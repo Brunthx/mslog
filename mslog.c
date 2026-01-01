@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include "mslog.h"
 
 mslog_global_t g_mslog = {
@@ -9,7 +10,10 @@ mslog_global_t g_mslog = {
 	.total_write_bytes = 0,
 	.total_flush_time = 0,
 	.rotate_check_cnt = 0,
-	.enable_console_color = 1
+	.enable_console_color = 1,
+	.batch_buf = NULL,
+	.batch_buf_total = 0,
+	.batch_buf_used = 0
 };
 
 #ifdef MULTI_THREAD
@@ -65,13 +69,6 @@ static void mslog_output(mslog_level_t level, const char *log_buf, size_t len){
 	{
 		return;
 	}
-	
-	if ( g_mslog.log_fp != NULL )
-	{
-		fwrite(log_buf, 1, len, g_mslog.log_fp);
-		fflush(g_mslog.log_fp);
-		fsync(fileno(g_mslog.log_fp));
-	}
 
 	if ( g_mslog.enable_console_color )
 	{
@@ -82,6 +79,20 @@ static void mslog_output(mslog_level_t level, const char *log_buf, size_t len){
 		fprintf(stdout, "%s", log_buf);
 	}
 	fflush(stdout);
+}
+
+static void mslog_batch_flush(void){
+	if ( g_mslog.log_fp == NULL || g_mslog.batch_buf == NULL || g_mslog.batch_buf_used == 0 )
+	{
+		return;
+	}
+	
+	fwrite(g_mslog.batch_buf, 1, g_mslog.batch_buf_used, g_mslog.log_fp);
+	fflush(g_mslog.log_fp);
+	fsync(fileno(g_mslog.log_fp));
+
+	memset(g_mslog.batch_buf, 0, g_mslog.batch_buf_total);
+	g_mslog.batch_buf_used = 0;
 }
 
 int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max_file_size, int max_file_count, mslog_flush_mode_t flush_mode){
@@ -104,10 +115,34 @@ int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max
 		return -2;
 	}
 
+	if ( g_mslog.flush_mode == MSLOG_FLUSH_BATCH )
+	{
+		g_mslog.batch_buf_total = MSLOG_BATCH_BUF_SIZE;
+		g_mslog.batch_buf = M_MEM_ALLOC(g_mslog.batch_buf_total);
+		if ( g_mslog.batch_buf == NULL )
+		{
+			fprintf(stderr, "批量缓冲区申请失败，降级为实时刷盘");
+			g_mslog.flush_mode = MSLOG_FLUSH_REAL_TIME;
+		}
+		else
+		{
+			memset(g_mslog.batch_buf, 0, g_mslog.batch_buf_total);
+			g_mslog.batch_buf_used = 0;
+		}
+	}
+
 	return 0;
 }
 
 void mslog_deinit(void){
+	if ( g_mslog.flush_mode == MSLOG_FLUSH_BATCH )
+	{
+		mslog_batch_flush();
+		M_MEM_FREE(g_mslog.batch_buf);
+		g_mslog.batch_buf = NULL;
+	}
+	
+
 	if ( g_mslog.log_fp != NULL)
 	{
 		fflush(g_mslog.log_fp);
@@ -176,9 +211,29 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 		{
 			fwrite(log_buf, 1, total_len, g_mslog.log_fp);
 			fflush(g_mslog.log_fp);
+			fsync(fileno(g_mslog.log_fp));
 		}
 		
 	}
+	else if ( g_mslog.flush_mode == MSLOG_FLUSH_BATCH )
+	{
+		mslog_output(level, log_buf, total_len);
+		mslog_update_stat(total_len);
+
+		if ( g_mslog.batch_buf_used + total_len < g_mslog.batch_buf_total )
+		{
+			memcpy(g_mslog.batch_buf + g_mslog.batch_buf_used, log_buf, total_len);
+			g_mslog.batch_buf_used += total_len;
+		}
+		else
+		{
+			mslog_batch_flush();
+			memcpy(g_mslog.batch_buf, log_buf, total_len);
+			g_mslog.batch_buf_used = total_len;
+		}
+		
+	}
+	
 	//log rotate check
 	if ( g_mslog.rotate_check_cnt >= MSLOG_ROTATE_CHECK_MAX )
 	{
