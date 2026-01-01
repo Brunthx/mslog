@@ -12,6 +12,11 @@ int mslog_thread_create(pthread_t *tid, int detach_mode, void *(*func)(void*), v
     {
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     }
+    else
+    {
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    }
+    
     
     int ret = pthread_create(tid, &attr, func, arg);
     pthread_attr_destroy(&attr);
