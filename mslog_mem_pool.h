@@ -19,9 +19,9 @@ typedef struct{
 
 extern mslog_mem_pool_t g_mslog_mem_pool;
 
-int mslog_mem_pool_init(void);
-void *mslog_mem_alloc(size_t size);
-void mslog_mem_free(void *ptr);
+void mslog_mem_pool_init(void);
+void *mslog_mem_pool_alloc(size_t size);
+void mslog_mem_pool_free(void *ptr);
 void mslog_mem_pool_deinit(void);
 
 #endif//__MSLOG_MEM_POOL_H__

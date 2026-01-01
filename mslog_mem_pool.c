@@ -6,16 +6,19 @@ mslog_mem_pool_t g_mslog_mem_pool = {
     .used_size = 0
 };
 
-int mslog_mem_pool_init(void){
+void mslog_mem_pool_init(void){
+    if ( g_mslog_mem_pool.pool_buf )
+    {
+        return;
+    }
     g_mslog_mem_pool.pool_size = MSLOG_MEM_POOL_BLOCK_SIZE * MSLOG_MEM_POOL_MAX_BLOCKS;
     g_mslog_mem_pool.pool_buf = (char *)malloc(g_mslog_mem_pool.pool_size);
-    if ( g_mslog_mem_pool.pool_buf == NULL )
+
+    if ( g_mslog_mem_pool.pool_buf )
     {
-        return -1;
+        memset(g_mslog_mem_pool.pool_buf, 0, g_mslog_mem_pool.pool_size);
+        g_mslog_mem_pool.used_size = 0;
     }
-    memset(g_mslog_mem_pool.pool_buf, 0, g_mslog_mem_pool.pool_size);
-    pthread_mutex_init(&g_mslog_mem_pool.pool_mutex, NULL);
-    return 0;
 }
 
 void *mslog_mem_pool_alloc(size_t size){
@@ -38,19 +41,21 @@ void *mslog_mem_pool_alloc(size_t size){
     return ptr;
 }
 
-void mslog_mem_free(void *ptr){
+void mslog_mem_pool_free(void *ptr){
     if ( ptr == NULL )
     {
         return;
     }
+    pthread_mutex_lock(&g_mslog_mem_pool.pool_mutex);
     if ( ptr >= (void *)g_mslog_mem_pool.pool_buf && ptr < (void *)(g_mslog_mem_pool.pool_buf + g_mslog_mem_pool.pool_size) )
     {
-        pthread_mutex_lock(&g_mslog_mem_pool.pool_mutex);
-        memset(ptr, 0, 1);
-        pthread_mutex_unlock(&g_mslog_mem_pool.pool_mutex);
-        return;
+        memset(ptr, 0, MSLOG_MEM_POOL_BLOCK_SIZE);
     }
-    free(ptr);
+    else
+    {
+        free(ptr);
+    }
+    pthread_mutex_unlock(&g_mslog_mem_pool.pool_mutex);
 }
 
 void mslog_mem_pool_deinit(void){
@@ -59,6 +64,7 @@ void mslog_mem_pool_deinit(void){
     {
         free(g_mslog_mem_pool.pool_buf);
         g_mslog_mem_pool.pool_buf = NULL;
+        g_mslog_mem_pool.pool_size = g_mslog_mem_pool.used_size = 0;
     }
     pthread_mutex_unlock(&g_mslog_mem_pool.pool_mutex);
     pthread_mutex_destroy(&g_mslog_mem_pool.pool_mutex);
