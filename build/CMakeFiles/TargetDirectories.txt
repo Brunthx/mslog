@@ -1,0 +1,3 @@
+/home/edison/project/devcode/mslog/build/CMakeFiles/mycapp.dir
+/home/edison/project/devcode/mslog/build/CMakeFiles/edit_cache.dir
+/home/edison/project/devcode/mslog/build/CMakeFiles/rebuild_cache.dir
