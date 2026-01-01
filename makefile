@@ -4,7 +4,7 @@ TARGET_MULTI  := $(TARGET)_multi
 
 CC            := gcc
 
-CFLAGS        := -Wall -g -O2 -Wno-unused-variable -Wno-format-truncation
+CFLAGS        := -Wall -g -O2
 
 LDFLAGS       := -lpthread
 
