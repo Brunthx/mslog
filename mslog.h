@@ -52,6 +52,23 @@ typedef struct{
 
 extern mslog_global_t g_mslog;
 
+//multi-thread & single-thread
+#ifdef MULTI_THREAD
+#define LOCK_STAT()			pthread_mutex_lock(&g_stat_mutex)
+#define UNLOCK_STAT()		pthread_mutex_unlock(&g_stat_mutex)
+#define M_POOL_INIT()		mslog_mem_pool_init()
+#define M_POOL_DEINIT()		mslog_mem_pool_deinit()
+#define M_MEM_ALLOC(s)		mslog_mem_pool_alloc(s)
+#define M_MEM_FREE(p)		mslog_mem_pool_free(p)
+#else
+#define LOCK_STAT()			do{} while (0)
+#define UNLOCK_STAT()		do{} while (0)
+#define M_POOL_INIT()		do{} while (0)
+#define M_POOL_DEINIT()		do{} while (0)
+#define M_MEM_ALLOC(s)		malloc(s)
+#define M_MEM_FREE(p)		free(p)
+#endif
+
 //default config marco
 #define MSLOG_ROTATE_CHECK_MAX			( 100 )
 #define MSLOG_LOG_BUF_SIZE				( 2048 )

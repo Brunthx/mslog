@@ -12,6 +12,10 @@ mslog_global_t g_mslog = {
 	.enable_console_color = 1
 };
 
+#ifdef MULTI_THREAD
+static pthread_mutex_t g_stat_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 static const char *mslog_level2str(mslog_level_t level){
 	switch (level)
 	{
@@ -49,11 +53,11 @@ static const char *mslog_level2color(mslog_level_t level){
 }
 
 static void mslog_update_stat(size_t len){
-	//pthread_mutex_lock(&g_mslog.log_mutex);//mutex lock only use in multi-thread, can't use in single thread
+	LOCK_STAT();
 	g_mslog.total_write_bytes += len;
 	g_mslog.total_flush_time++;
 	g_mslog.rotate_check_cnt++;
-	//pthread_mutex_unlock(&g_mslog.log_mutex);
+	UNLOCK_STAT();
 }
 
 static void mslog_output(mslog_level_t level, const char *log_buf, size_t len){
@@ -86,8 +90,7 @@ int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max
 		return -1;
 	}
 	
-	mslog_mem_pool_init();
-	pthread_mutex_init(&g_mslog.log_mutex, NULL);
+	M_POOL_INIT();
 
 	strncpy(g_mslog.log_path, log_path, ( sizeof(g_mslog.log_path) - 1 ));
 	g_mslog.log_level = log_level;
@@ -105,7 +108,6 @@ int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max
 }
 
 void mslog_deinit(void){
-	pthread_mutex_lock(&g_mslog.log_mutex);
 	if ( g_mslog.log_fp != NULL)
 	{
 		fflush(g_mslog.log_fp);
@@ -113,9 +115,10 @@ void mslog_deinit(void){
 		fclose(g_mslog.log_fp);
 		g_mslog.log_fp = NULL;
 	}
-	pthread_mutex_unlock(&g_mslog.log_mutex);
-	mslog_mem_pool_deinit();
+	M_POOL_DEINIT();
+#ifdef MULTI_THREAD
 	pthread_mutex_destroy(&g_mslog.log_mutex);
+#endif
 }
 
 void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, const char *func, const char *fmt, ...){
@@ -129,16 +132,21 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 		return;
 	}
 
-	char time_buf[32] = {0};
-	char log_buf[MSLOG_LOG_BUF_SIZE] = {0};
+	char *log_buf = M_MEM_ALLOC(MSLOG_LOG_BUF_SIZE);
+	if ( log_buf == NULL )
+	{
+		return;
+	}
+
 	va_list args;
+	char time_buf[32] = {0};
 
 	tag = (tag == NULL) ? "TEST" : tag;
 	file = (file == NULL) ? "test_mslog.c" : file;
 	func = (func == NULL) ? "main" : func;
 
 	mslog_utils_get_time_str(time_buf, sizeof(time_buf));
-	int head_len = snprintf(log_buf, sizeof(log_buf),
+	int head_len = snprintf(log_buf, MSLOG_LOG_BUF_SIZE,
                             "[%s] [%s] [%s] %s:%d:%s ",
                             time_buf, mslog_level2str(level), tag, file, line, func);
 	if ( head_len < 0 )
@@ -181,4 +189,5 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 		g_mslog.rotate_check_cnt = 0;
 	}
 	pthread_mutex_unlock(&g_mslog.log_mutex);
+	M_MEM_FREE(log_buf);
 }
