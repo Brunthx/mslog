@@ -16,4 +16,4 @@ int mslog_utils_log_rotate(const char *base_path, int max_count);
 void mslog_utils_get_time_str(char *buf, int buf_len);
 int mslog_utils_is_file_exist(const char *file_path);
 
-#endif//__MSLOG_UTIL_H__
+#endif//__MSLOG_UTILS_H__
