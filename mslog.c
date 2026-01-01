@@ -155,7 +155,7 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 	}
 	
 	va_start(args, fmt);
-	int content_len = vsnprintf(log_buf + head_len, sizeof(log_buf) - head_len, fmt, args);
+	int content_len = vsnprintf(log_buf + head_len, MSLOG_LOG_BUF_SIZE - head_len, fmt, args);
 	va_end(args);
 	if ( content_len <= 0)
 	{
