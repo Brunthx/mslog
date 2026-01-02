@@ -90,6 +90,6 @@ stress_multi:
 	./test_mslog_stress_multi
 
 stress_clean:
-	rm -rf test_mslog_stress_single test_mslog_stress_multi mslog_stress_*.log
+	rm -rf test_mslog_stress_single test_mslog_stress_multi mslog_stress_*.log.[0-999]*
 
 .PHONY: all multi_all run run_multi clean rebuild multi_rebuild full_clean
