@@ -38,4 +38,14 @@
   
   新增批量刷盘；  
 
-  重写测试用例。
+  重写测试用例。  
+
+  #update 2026/01/02：  
+
+  新增单线程压力测试功能，具体可参考：test_mslog_stress_single.c  
+  
+  新增单线程压力测试指令：make stress_single；  
+  
+  新增多线程压力测试功能，具体可参考：test_mslog_stress_multi.c  
+  
+  新增多线程压力测试指令：make stress_multi。 
