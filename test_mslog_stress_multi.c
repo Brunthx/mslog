@@ -2,10 +2,10 @@
 #include "mslog.h"
 
 // 压测配置（可直接修改）
-#define TEST_THREAD_NUM      8           // 并发线程数（4/8/16/32，按需调整）
-#define TEST_LOG_PER_THREAD  50000       // 每个线程打印5万条，总日志=8*5万=40万条
-#define TEST_FLUSH_MODE      MSLOG_FLUSH_BATCH // 切换模式：实时/批量
-#define TEST_LOG_FILE        "./mslog_stress_multi.log"
+#define TEST_THREAD_NUM      ( 8 )          // 并发线程数（4/8/16/32，按需调整）
+#define TEST_LOG_PER_THREAD  ( 50000 )       // 每个线程打印5万条，总日志=8*5万=40万条
+#define TEST_FLUSH_MODE      ( MSLOG_FLUSH_BATCH ) // 切换模式：实时/批量
+#define TEST_LOG_FILE        ( "./mslog_stress_multi.log" )
 
 // 全局统计：总耗时
 static long long g_total_cost_ms = 0;
