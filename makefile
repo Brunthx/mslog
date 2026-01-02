@@ -81,4 +81,15 @@ full_clean: clean
 	@rm -rf ./*.log ./*.o ./*~ 2>/dev/null || true
 	@echo -e "$(COLOR_GREEN)✅ full_clean完成！目录已恢复纯净$(COLOR_RESET)"
 
+stress_single:
+	gcc -o test_mslog_stress_single test_mslog_stress_single.c mslog.c mslog_utils.c mslog_thread.c mslog_mem_pool.c -lpthread -O2
+	./test_mslog_stress_single
+
+stress_multi:
+	gcc -o test_mslog_stress_multi test_mslog_stress_multi.c mslog.c mslog_utils.c mslog_thread.c mslog_mem_pool.c -lpthread -O2 -DMULTI_THREAD
+	./test_mslog_stress_multi
+
+stress_clean:
+	rm -rf test_mslog_stress_single test_mslog_stress_multi mslog_stress_*.log.[0-999]*
+
 .PHONY: all multi_all run run_multi clean rebuild multi_rebuild full_clean

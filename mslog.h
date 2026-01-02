@@ -6,6 +6,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <errno.h>
+#include <stdint.h>
 #include "mslog_mem_pool.h"
 #include "mslog_utils.h"
 #include "mslog_thread.h"
@@ -47,12 +49,15 @@ typedef struct{
 	int rotate_check_cnt;
 	pthread_mutex_t log_mutex;
 	int enable_console_color;
-    FILE *batch_buf;
+    char *batch_buf;
 	size_t batch_buf_total;
 	size_t batch_buf_used;
 }mslog_global_t;
 
 extern mslog_global_t g_mslog;
+
+#define M_MEM_IS_VALID(ptr)  \
+    ((ptr) != NULL && (uintptr_t)(ptr) > 0x1000 && (uintptr_t)(ptr) < 0x7FFFFFFFFFFF)
 
 //multi-thread & single-thread
 #ifdef MULTI_THREAD
@@ -72,9 +77,9 @@ extern mslog_global_t g_mslog;
 #endif
 
 //default config marco
-#define MSLOG_ROTATE_CHECK_MAX			( 100 )
-#define MSLOG_LOG_BUF_SIZE				( 2048 )
-#define MSLOG_BATCH_BUF_SIZE			( 16 * 1024 )
+#define MSLOG_ROTATE_CHECK_MAX			( 1000 )
+#define MSLOG_LOG_BUF_SIZE				( 4096 )
+#define MSLOG_BATCH_BUF_SIZE			( 65536 )
 
 //log output interface
 int mslog_init_default(const char *log_path, mslog_level_t log_level, 
@@ -95,4 +100,9 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 #define MSLOG_FATAL(tag, fmt, ...)\
 	mslog_log(MSLOG_FATAL, tag, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
+
+#define STRESS_LOG_COUNT       	( 100000 )
+#define STRESS_THREAD_NUM      	( 8 )     
+#define STRESS_PER_THREAD_LOG  	( 50000 )
+#define STRESS_TEST_TAG        	( "STRESS_TEST" )
 #endif//__MSLOG_H__
