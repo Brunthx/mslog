@@ -74,7 +74,7 @@ extern mslog_global_t g_mslog;
 //default config marco
 #define MSLOG_ROTATE_CHECK_MAX			( 100 )
 #define MSLOG_LOG_BUF_SIZE				( 2048 )
-#define MSLOG_BATCH_BUF_SIZE			( 16 * 1024 )
+#define MSLOG_BATCH_BUF_SIZE			( 65536 )
 
 //log output interface
 int mslog_init_default(const char *log_path, mslog_level_t log_level, 
@@ -95,4 +95,9 @@ void mslog_log(mslog_level_t level, const char *tag, const char *file, int line,
 #define MSLOG_FATAL(tag, fmt, ...)\
 	mslog_log(MSLOG_FATAL, tag, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
+
+#define STRESS_LOG_COUNT       	( 100000 )
+#define STRESS_THREAD_NUM      	( 8 )     
+#define STRESS_PER_THREAD_LOG  	( 50000 )
+#define STRESS_TEST_TAG        	( "STRESS_TEST" )
 #endif//__MSLOG_H__
