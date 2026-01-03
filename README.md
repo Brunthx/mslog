@@ -48,4 +48,8 @@
   
   新增多线程压力测试功能，具体可参考：test_mslog_stress_multi.c  
   
-  新增多线程压力测试指令：make stress_multi。 
+  新增多线程压力测试指令：make stress_multi。  
+
+  #update 2026/01/03：
+
+  新增mslog_keep_alive接口（无数据时更新文件属性，专为tail -f保活设计）。
