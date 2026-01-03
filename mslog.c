@@ -106,6 +106,25 @@ static void mslog_batch_flush(void){
 	g_mslog.batch_buf_used = 0;
 }
 
+void mslog_keep_alive(void){
+    if ( g_mslog.log_fp == NULL ) 
+    {
+        return;
+    }
+
+    static time_t last_alive = 0;
+    time_t now = time(NULL);
+    if ( now - last_alive < 60 )
+    {
+        return;
+    }
+    last_alive = now;
+
+    fputc('\0', g_mslog.log_fp);
+    fflush(g_mslog.log_fp);
+    fsync(fileno(g_mslog.log_fp));
+}
+
 int mslog_init_default(const char *log_path, mslog_level_t log_level, size_t max_file_size, int max_file_count, mslog_flush_mode_t flush_mode){
 	if (log_path == NULL || strlen(log_path) == 0 || max_file_count <= 0)
 	{

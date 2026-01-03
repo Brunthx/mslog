@@ -87,7 +87,7 @@ int mslog_init_default(const char *log_path, mslog_level_t log_level,
 void mslog_deinit(void);
 void mslog_log(mslog_level_t level, const char *tag, const char *file, int line, 
         const char *func, const char *fmt, ...);
-
+void mslog_keep_alive(void);
 //log marco define
 #define MSLOG_DEBUG(tag, fmt, ...)\
 	mslog_log(MSLOG_DEBUG, tag, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
