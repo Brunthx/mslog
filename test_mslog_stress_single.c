@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
-#include "mslog.h"
+#include "mslog_include.h"
 
 #define TEST_LOG_TOTAL         ( 100000 )//100000 pass!1000000 pass!
 #define TEST_FLUSH_MODE        ( MSLOG_FLUSH_BATCH )//MSLOG_FLUSH_BATCH/MSLOG_FLUSH_REAL_TIME

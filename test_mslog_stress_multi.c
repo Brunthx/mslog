@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
-#include "mslog.h"
+#include "mslog_include.h"
 
 // 压测配置（可直接修改）
 #define TEST_THREAD_NUM      ( 8 )          // 并发线程数（4/8/16/32，按需调整）

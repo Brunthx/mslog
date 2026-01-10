@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
-#include "mslog.h"
+#include "mslog_include.h"
 
 mslog_global_t g_mslog = {
 	.log_fp = NULL,

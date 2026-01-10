@@ -1,4 +1,4 @@
-#include "mslog.h"
+#include "mslog_include.h"
 
 #define TEST_THREAD_CNT 5
 

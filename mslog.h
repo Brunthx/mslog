@@ -1,7 +1,7 @@
 #ifndef __MSLOG_H__
 #define __MSLOG_H__
 
-#include "mslog_include.h"
+#include "common.h"
 
 //color setting
 #define MSLOG_COLOR_DEBUG   "\033[030m"//grey
