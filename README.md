@@ -40,7 +40,7 @@
 
   重写测试用例。  
 
-  #update 2026/01/02：  
+#update 2026/01/02：  
 
   新增单线程压力测试功能，具体可参考：test_mslog_stress_single.c  
   
@@ -50,6 +50,10 @@
   
   新增多线程压力测试指令：make stress_multi。  
 
-  #update 2026/01/03：
+#update 2026/01/03：
 
-  新增mslog_keep_alive接口（无数据时更新文件属性，专为tail -f保活设计）。
+  新增mslog_keep_alive接口（无数据时更新文件属性，专为tail -f保活设计）。  
+  
+#update 2026/01/10：
+
+  整合头文件，新增common.h mslog_include.h。
