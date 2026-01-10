@@ -2,10 +2,7 @@
 #ifndef __MSLOG_MEM_POOL_H__
 #define __MSLOG_MEM_POOL_H__
 
-#include <stdio.h>
-#include <pthread.h>
-#include <stdlib.h>
-#include <string.h>
+#include "common.h"
 
 #define MSLOG_MEM_POOL_BLOCK_SIZE   ( 4096 )
 #define MSLOG_MEM_POOL_MAX_BLOCKS   ( 1024 )

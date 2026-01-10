@@ -1,16 +1,7 @@
 #ifndef __MSLOG_H__
 #define __MSLOG_H__
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <stdint.h>
-#include "mslog_mem_pool.h"
-#include "mslog_utils.h"
-#include "mslog_thread.h"
+#include "mslog_include.h"
 
 //color setting
 #define MSLOG_COLOR_DEBUG   "\033[030m"//grey
