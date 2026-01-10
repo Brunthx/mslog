@@ -3,9 +3,7 @@
 #ifndef __MSLOG_THREAD_H__
 #define __MSLOG_THREAD_H__
 
-#include <pthread.h>
-#include <unistd.h>
-#include <time.h>
+#include "common.h"
 
 #define MSLOG_THREAD_DETACHED		( 1 )
 #define MSLOG_THREAD_JOINABLE		( 0 )
